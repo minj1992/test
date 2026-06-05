@@ -1,0 +1,180 @@
+Here's the exact list of changes I made to turn your source into a working static-export build. Apply these in your office repo, then run the build and zip the out/ contents.
+Files I changed (3 files)
+1. next.config.ts — switch from server build to static export, and disable image optimization (the optimizer needs a server, which static hosting doesn't have).
+Replace the whole file with:
+tsimport type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  output: "export",
+  images: { unoptimized: true },
+};
+
+export default nextConfig;
+2. src/app/page.tsx — the root page used redirect(), which needs a server. Static export has none, so make the redirect run in the browser instead.
+Replace the whole file with:
+tsx"use client";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+export default function Home() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/dashboard/overview");
+  }, [router]);
+  return null;
+}
+3. src/app/layout.tsx — this one is a special case. I only changed it because my build machine couldn't reach Google Fonts. On your office machine, you do NOT need this change — keep your original layout.tsx with next/font/google, because the font downloads fine there during the build.
+Only use the version below if your office build also fails with a "Failed to fetch Manrope from Google Fonts" error (e.g. behind a strict office firewall/proxy). It loads Manrope via a normal stylesheet link instead:
+tsximport "../styles/globals.css";
+import AosProvider from "@/src/components/animation/AosProvider";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body style={{ fontFamily: "Manrope, system-ui, sans-serif" }}>
+        <AosProvider>{children}</AosProvider>
+      </body>
+    </html>
+  );
+}
+Important: one earlier change to undo
+In the very first bundle I gave you, I had added a line to next.config.ts for the Docker path:
+output: "standalone",
+Step 1 above already overwrites the whole file, so this gets removed automatically — just make sure your final next.config.ts matches the Step 1 version exactly (it should say output: "export", not "standalone").
+Build and zip (run in the office system)
+In Command Prompt, inside the chryselys-pandora-frontend folder:
+npm install
+npm run build
+This creates an out folder. Then zip the contents of out — not the folder itself:
+
+Open the out folder, select everything inside it (so index.html is at the top level of the zip), right-click → Send to → Compressed (zipped) folder.
+If you zip the out folder itself, you'll get out/index.html inside the zip and Amplify will show a blank page. That's the one thing to get right.
+
+Then upload that zip to Amplify exactly as you just did.
+Quick summary
+#File pathChangeNeeded in office?1next.config.tsSet output: "export" + images.unoptimizedYes2src/app/page.tsxClient-side redirect instead of redirect()Yes3src/app/layout.tsxStylesheet-link font instead of next/font/googleOnly if the build can't reach Google Fonts
+Changes 1 and 2 are the real fixes that make the static export work. Change 3 is environment-specific.
+One thing worth confirming for your office setup: is internet access (npm registry and Google Fonts) open on that machine, or is it behind a proxy? That determines whether you need change 3 — tell me and I'll give you the exact handling.You said: so me the file name along with path and code also before and afterso me the file name along with path and code also before and after8:57 AMClaude responded: Here's each file with its exact path, plus the before (original) and after (working) code.Here's each file with its exact path, plus the before (original) and after (working) code.
+File 1 — chryselys-pandora-frontend/next.config.ts
+BEFORE (what was in the bundle — note the standalone line I'd added for Docker):
+tsimport type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  output: "standalone", // self-contained build for Docker/ECS/EKS
+  turbopack: {}, // prevents warning
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
+    ],
+  },
+};
+
+export default nextConfig;
+AFTER (static export for Amplify manual zip deploy):
+tsimport type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  output: "export",
+  images: { unoptimized: true },
+};
+
+export default nextConfig;
+What changed: output goes from "standalone" to "export" (produces a static out/ folder), and images are set to unoptimized because static hosting has no server to optimize them. The images.unsplash.com remote pattern is no longer needed once optimization is off.
+File 2 — chryselys-pandora-frontend/src/app/page.tsx
+BEFORE (original — uses a server-side redirect):
+tsximport { redirect } from "next/navigation";
+
+export default function Home() {
+  redirect("/dashboard/overview");
+}
+AFTER (browser-side redirect, because static export has no server):
+tsx"use client";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+export default function Home() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/dashboard/overview");
+  }, [router]);
+  return null;
+}
+What changed: redirect() from next/navigation runs only on a server. In export mode there's no server, so it's replaced with a client component that redirects in the browser using useRouter().replace inside useEffect.
+File 3 — chryselys-pandora-frontend/src/app/layout.tsx
+This one you only change if your office build can't reach Google Fonts. On a normal machine, keep the BEFORE version.
+BEFORE (original — loads Manrope at build time via next/font/google):
+tsximport type { Metadata } from "next";
+import { Manrope } from "next/font/google";
+import "../styles/globals.css";
+import AosProvider from "@/src/components/animation/AosProvider";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+});
+
+export const metadata: Metadata = {
+  title: "Pandora",
+  description: "News Monitoring Dashboard",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body className={manrope.className}>
+        <AosProvider>{children}</AosProvider>
+      </body>
+    </html>
+  );
+}
+AFTER (loads Manrope via a stylesheet link in the browser — only needed if the build host is blocked from Google Fonts):
+tsximport "../styles/globals.css";
+import AosProvider from "@/src/components/animation/AosProvider";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body style={{ fontFamily: "Manrope, system-ui, sans-serif" }}>
+        <AosProvider>{children}</AosProvider>
+      </body>
+    </html>
+  );
+}
+What changed: the build-time font fetch (next/font/google) is removed and Manrope is loaded by the visitor's browser via a <link> tag, so the build no longer needs Google Fonts access.
+A note of caution on this file: I reconstructed the BEFORE version of layout.tsx from memory of the project, so your office copy may have slightly different metadata text or attributes. The only edit that matters for the font issue is removing the Manrope/next/font/google import and its manrope.className usage, and adding the <link> tags — leave everything else in your actual file as-is.
+Summary table
+#PathBeforeAfterApply in office?1chryselys-pandora-frontend/next.config.tsoutput: "standalone"output: "export" + images.unoptimized: trueYes2chryselys-pandora-frontend/src/app/page.tsxredirect("/dashboard/overview")client useRouter().replace in useEffectYes3chryselys-pandora-frontend/src/app/layout.tsxnext/font/google Manrope<link> stylesheet ManropeOnly if build can't reach Google Fonts
+Then: npm install → npm run build → zip the contents of out/ → upload to Amplify.
+Since I rebuilt the project from the original dump earlier, I can confirm files 1 and 2 against the real originals, but I want to be accurate about file 3. If you paste your actual src/app/layout.tsx from the office repo, I'll mark the exact lines to change rather than you replacing the whole file.
