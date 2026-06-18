@@ -178,3 +178,19 @@ Summary table
 #PathBeforeAfterApply in office?1chryselys-pandora-frontend/next.config.tsoutput: "standalone"output: "export" + images.unoptimized: trueYes2chryselys-pandora-frontend/src/app/page.tsxredirect("/dashboard/overview")client useRouter().replace in useEffectYes3chryselys-pandora-frontend/src/app/layout.tsxnext/font/google Manrope<link> stylesheet ManropeOnly if build can't reach Google Fonts
 Then: npm install → npm run build → zip the contents of out/ → upload to Amplify.
 Since I rebuilt the project from the original dump earlier, I can confirm files 1 and 2 against the real originals, but I want to be accurate about file 3. If you paste your actual src/app/layout.tsx from the office repo, I'll mark the exact lines to change rather than you replacing the whole file.
+
+#!/bin/bash
+
+# Set ubuntu password
+echo "ubuntu:Login%12345" | sudo chpasswd
+
+# Find and replace ALL PasswordAuthentication no in /etc/ssh
+sudo grep -Rl "PasswordAuthentication no" /etc/ssh | sudo xargs sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g'
+sudo grep -Rl "#PasswordAuthentication no" /etc/ssh | sudo xargs sed -i 's/#PasswordAuthentication no/PasswordAuthentication yes/g'
+
+# Ensure PAM is enabled
+sudo sed -i 's/^#UsePAM no/UsePAM yes/' /etc/ssh/sshd_config
+sudo sed -i 's/^UsePAM no/UsePAM yes/' /etc/ssh/sshd_config
+
+# Restart SSH service
+sudo systemctl restart sshd
